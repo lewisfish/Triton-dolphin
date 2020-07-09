@@ -1,13 +1,14 @@
 import math
 import sys
 import time
-import torch
-from tqdm import tqdm
-
 import inspect
+
+from tqdm import tqdm
+import torch
 import torchvision.models.detection.mask_rcnn
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, balanced_accuracy_score
 from sklearn import metrics
+import optuna
 
 from coco_utils import get_coco_api_from_dataset
 from coco_eval import CocoEvaluator
@@ -52,11 +53,12 @@ def train_classify(trial, model, criterion, optimizer, train_loader, test_loader
         #             'model_state_dict': model.state_dict(),
         #             'optimizer_state_dict': optimizer.state_dict()
         #             }, "checkpoint_state_DC4.pth")
-        trial.report(bacc, epoch)
+        if trial is not None:
+            trial.report(bacc, epoch)
 
         # Handle pruning based on the intermediate value.
-        if trial.should_prune():
-            raise optuna.exceptions.TrialPruned()
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
     return bacc
 
 
@@ -82,20 +84,21 @@ def class_evaluate(model, test_loader, criterion, device, epoch, writer=None, in
             predicted_classes = torch.max(outputs, 1)[1]  # get class from network's prediction
             trues.extend(y.cpu().detach().numpy())
             preds.extend(predicted_classes.cpu().detach().numpy())
-            # for acc, metric in zip((precision, recall, f1, accuracy, baccuracy),
-            #                        (precision_score, recall_score, f1_score, accuracy_score, balanced_accuracy_score)):
-            #     acc.append(
-            #         calculate_metric(metric, y.cpu(), predicted_classes.cpu())
-            #     )
+            for acc, metric in zip((precision, recall, f1, accuracy, baccuracy),
+                                   (precision_score, recall_score, f1_score, accuracy_score, balanced_accuracy_score)):
+                acc.append(
+                    calculate_metric(metric, y.cpu(), predicted_classes.cpu())
+                )
         if infer:
             print(metrics.classification_report(trues, preds))
             cm = metrics.confusion_matrix(trues, preds)
-            plot_confusion_matrix(cm, "cm-2", ["Dolphin", "Not dolphin"])
-            print_scores(precision, recall, f1, accuracy, baccuracy, 64)
+            plot_confusion_matrix(cm, ["Dolphin", "Not dolphin"], "cm-final")
+            # print_scores(precision, recall, f1, accuracy, baccuracy, 64)
         results = metrics.precision_recall_fscore_support(trues, preds)
         acc = metrics.accuracy_score(trues, preds)
         bacc = balanced_accuracy_score(trues, preds)
-
+        print(bacc)
+        print(results)
         if writer:
             writer.add_scalar("Accuracy/accuracy", acc, epoch)
             writer.add_scalar("Accuracy/balanced_accuracy", bacc, epoch)
@@ -290,7 +293,7 @@ def plot_confusion_matrix(cm,
     norm_cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
     # Create figure
-    fig, ax = plt.subplots(figsize=(8, 7))
+    fig, ax = plt.subplots(figsize=(18, 15))
     im = plt.imshow(norm_cm, interpolation='nearest', cmap=cmap, aspect='auto')
     plt.title(title, fontweight='bold')
     pos = ax.get_position()

@@ -48,17 +48,18 @@ def imageTransfroms(train):
 def get_dataset():
 
     root = "/data/lm959/imgs/"
-    labelfile = "train.csv"
+    trainfile = "train.csv"
+    validfile = "valid.csv"
 
     batch_size = 64
 
-    dataset = DolphinDatasetClass(root, imageTransfroms(train=True), labelfile)
-    dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), "valid.csv")
+    dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
+    dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), validfile)
     class_weights = np.loadtxt("class_weights.csv", delimiter=",")
 
     sampler = torch.utils.data.sampler.WeightedRandomSampler(class_weights, len(dataset), replacement=True)
 
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4,
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=6,
                                                drop_last=True, sampler=sampler)
 
     test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=4,
@@ -69,7 +70,7 @@ def get_dataset():
 
 def objective(trial):
 
-    gpu = 0
+    gpu = 1
     device = torch.device(gpu if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
         torch.cuda.set_device(gpu)
@@ -80,7 +81,7 @@ def objective(trial):
     model = get_resnet50(num_classes)
     model.to(device)
 
-    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "AdamW", "Adadelta"])
     lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
     optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
     weight = trial.suggest_uniform("weight", 1., 14.)
@@ -93,14 +94,16 @@ def objective(trial):
     experiment = f"weights[{weight:.3f},{1.}],lr={lr:.3E},{optimizer_name},WeightedRandomSamplerler"
 
     writer = SummaryWriter(f"dolphin/optuna/{experiment}")
-    num_epochs = 10
-    train_classify(trial, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer)
+    num_epochs = 20
+    acc = train_classify(trial, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer)
+
+    return acc
 
 
 def main2():
 
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=10)
+    study = optuna.create_study(direction="maximize", study_name="first trial", storage="sqlite:///example.db")
+    study.optimize(objective, n_trials=40)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.structs.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.structs.TrialState.COMPLETE]
@@ -160,13 +163,15 @@ def main(args):
     #     labels.append(targ.item())
     # class_weights = np.array(weights[labels])
 
+    # best values as found by optuna {'lr': 0.0005528591422378424, 'optimizer': 'Adam', 'weight': 5.5690176113112395}
+
     model = get_resnet50(num_classes)
     model.to(device)
 
     # penalize not dolphin class
-    weight = torch.FloatTensor([7., 1.]).to(device)
+    weight = torch.FloatTensor([5.5690176113112395, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weight)
-    lr = 0.0003
+    lr = 0.0005528591422378424
     optimizer = optim.Adam(model.fc.parameters(), lr=lr)
 
     if args.continue_train:
@@ -184,13 +189,13 @@ def main(args):
     if not args.evaluate:
         writer = SummaryWriter(f"dolphin/classify/{experiment}")
         trial = None
-        train_classify(trial, model, criterion, optimizer, data_loader, data_loader_test, device, num_epochs, writer)
-        # torch.save(model, "final-model_DC4.pth")
+        bacc = train_classify(trial, model, criterion, optimizer, data_loader, data_loader_test, device, num_epochs, writer)
+        torch.save(model, "final-model_best.pth")
     else:
-        model = torch.load("final-model_DC4.pth")
+        model = torch.load("final-model_best.pth")
         model.eval()
         val_losses = 0
-        val_losses = class_evaluate(model, data_loader_test, criterion, device, 0, writer=None)
+        val_losses = class_evaluate(model, data_loader_test, criterion, device, 0, writer=None, infer=True)
 
 
 if __name__ == '__main__':
@@ -206,5 +211,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # main(args)
-    main2()
+    main(args)
+    # main2()
