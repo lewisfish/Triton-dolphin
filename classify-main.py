@@ -1,34 +1,17 @@
 import argparse
 
+import numpy as np
+import optuna
 import torch
-import torchvision
 from torchvision import transforms as T
 from torch.utils.tensorboard import SummaryWriter
 from torch import nn
 from torch import optim
-import numpy as np
-import optuna
+import tqdm
 
 from customdata import DolphinDatasetClass
 from engine import train_classify, class_evaluate
-
-
-def get_resnet50(num_classes):
-
-    # get pretrained model
-    model = torchvision.models.resnet50(pretrained=True)
-    # freeze layers
-    for param in model.parameters():
-        param.requires_grad = False
-
-    # swap out final layer so has the correct number of classes.
-    model.fc = nn.Sequential(nn.Linear(2048, 512),
-                             nn.ReLU(),
-                             nn.Dropout(0.2),
-                             nn.Linear(512, num_classes),
-                             nn.LogSoftmax(dim=1))
-
-    return model
+from models import Frankenstein, get_resnet50
 
 
 def imageTransfroms(train):
@@ -48,14 +31,14 @@ def imageTransfroms(train):
 def get_dataset():
 
     root = "/data/lm959/imgs/"
-    trainfile = "train.csv"
-    validfile = "valid.csv"
+    trainfile = "data/train.csv"
+    validfile = "data/valid.csv"
 
     batch_size = 64
 
     dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
     dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), validfile)
-    class_weights = np.loadtxt("class_weights.csv", delimiter=",")
+    class_weights = np.loadtxt("data/class_weights.csv", delimiter=",")
 
     sampler = torch.utils.data.sampler.WeightedRandomSampler(class_weights, len(dataset), replacement=True)
 
@@ -137,37 +120,40 @@ def main(args):
     num_classes = len(classes)
 
     root = "/data/lm959/imgs/"
-    labelfile = "train.csv"
+    trainfile = "data/train.csv"
+    validfile = "data/valid.csv"
 
     batch_size = 64
 
-    dataset = DolphinDatasetClass(root, imageTransfroms(train=True), labelfile)
-    dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), "valid.csv")
-    class_weights = np.loadtxt("class_weights.csv", delimiter=",")
+    dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
+    dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), validfile)
+
+    # create class weights.
+    # easier to do once then read in saved weights as reading images takes
+    # too long
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
+    try:
+        class_weights = np.loadtxt("data/class_weights.csv", delimiter=",")
+    except OSError:
+        labels = []
+        weights = 1000. / torch.tensor([1602, 11688.], dtype=torch.float)
+        for i, (img, targ) in enumerate(tqdm.tqdm(data_loader)):
+            labels.append(targ.item())
+        class_weights = np.array(weights[labels])
+        np.savetxt("data/class_weights.csv", class_weights)
 
     sampler = torch.utils.data.sampler.WeightedRandomSampler(class_weights, len(dataset), replacement=True)
-
+    # now use dataloader with sampler
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4,
                                               drop_last=True, sampler=sampler)
 
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=4,
                                                    drop_last=True)
 
-    # create class weights.
-    # easier to do once then read in saved weights as reading images takes
-    # too long
-
-    # labels = []
-    # weights = 1000. / torch.tensor([1602, 11688.], dtype=torch.float)
-    # for i, (img, targ) in enumerate(data_loader):
-    #     labels.append(targ.item())
-    # class_weights = np.array(weights[labels])
-
-    # best values as found by optuna {'lr': 0.0005528591422378424, 'optimizer': 'Adam', 'weight': 5.5690176113112395}
-
     model = get_resnet50(num_classes)
     model.to(device)
 
+    # best values as found by optuna {'lr': 0.0005528591422378424, 'optimizer': 'Adam', 'weight': 5.5690176113112395}
     # penalize not dolphin class
     weight = torch.FloatTensor([5.5690176113112395, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weight)
