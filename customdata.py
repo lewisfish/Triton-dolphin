@@ -1,13 +1,18 @@
 import json
 from pathlib import Path
+from typing import Tuple
 
 import cv2
 import numpy as np
+import pandas as pd
 from PIL import Image
+from sklearn.preprocessing import minmax_scale
+from sklearn.utils import shuffle
 import torch
 from torchvision import transforms
 
-__all__ = ["DolphinDataset", "DolphinDatasetClass"]
+
+__all__ = ["DolphinDataset", "DolphinDatasetClass", "getNumericalData"]
 
 # example data item
 # 錄製_2019_11_28_12_05_07_124.mp4, 30440, 749, 550, 758, 556, 10
@@ -15,6 +20,45 @@ __all__ = ["DolphinDataset", "DolphinDatasetClass"]
 # cavet is that y1 and y2 offset by 130 due to cropping of screen recording
 # this wont be true for all data after deploy though
 # just true of the train, test, validation sets.
+
+
+def getNumericalData(filename: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Function read and processes the numerical data for training on.
+
+    Parameters
+    ----------
+
+    filename: str
+        Name of file to read in
+
+    Returns
+    -------
+
+    Tuple: Tuple[pd.DataFrame, pd.DataFrame]
+
+    """
+
+    df = pd.read_csv(filename)
+
+    # shuffle data
+    train = shuffle(df, random_state=49)
+    train.reset_index(drop=True, inplace=True)
+
+    # get pertinent parts
+    X_train = train[["velocity", "hdbscan"]]
+    Y_train = train["labels"]
+    Y_train = Y_train.to_frame("labels")
+
+    # relabel the labels sdo now a binary problem
+    Y_train["labels"] = np.where(Y_train["labels"] >= 3, 1, Y_train["labels"])
+    Y_train["labels"] = np.where(Y_train["labels"] != 1, 0, Y_train["labels"])
+
+    # modifying scale of data (minMax and robust scale)
+    x = X_train.to_numpy()
+    x_scaled = minmax_scale(x)
+    X_train = pd.DataFrame(x_scaled)
+
+    return (X_train, Y_train)
 
 
 class DolphinDataset(object):
@@ -160,6 +204,15 @@ class DolphinDatasetClass(object):
                 self.kmeans.append(int(parts[8]))
                 self.hdbscans.append(int(parts[9]))
 
+        # convert to numpy arrays
+        self.velocities = np.array(self.velocities)
+        self.kmeans = np.array(self.kmeans)
+        self.hdbscans = np.array(self.hdbscans)
+
+        # scale the features
+        self.velocities = minmax_scale(self.velocities)
+        self.hdbscans = minmax_scale(self.hdbscans)
+
     def _getFullFileName(self, target):
         '''Get the full filename path'''
 
@@ -181,6 +234,14 @@ class DolphinDatasetClass(object):
         bottom = self.bboxs[idx][2] + 130
         right = self.bboxs[idx][3]
 
+        ymax, xmax = image.shape[0], image.shape[1]
+
+        top = max(0, top-5)
+        bottom = min(ymax, bottom+5)
+
+        left = max(0, left-5)
+        right = min(xmax, right+5)
+
         image = image[top:bottom, left:right, :]
 
         # labels = {0: "dolphin", 1: "bird", 2: "multi Dolphin", 3: "whale", 4: "turtle", 5: "unknown", 6: "unknown not cetacean", 7: "boat", 8: "fish", 9: "trash", 10: "water"}
@@ -193,7 +254,7 @@ class DolphinDatasetClass(object):
             else:
                 label = 0
 
-        data = [self.velocities[idx], self.kmeans[idx], self.hdbscans[idx]]
+        data = [self.velocities[idx], self.hdbscans[idx]]
         data = torch.as_tensor(data)
         target = torch.as_tensor(label, dtype=torch.int64)
         if self.transforms:

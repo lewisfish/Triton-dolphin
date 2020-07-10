@@ -31,8 +31,11 @@ def train_classify(trial, model, criterion, optimizer, train_loader, test_loader
             inputs = data[0].to(device)
             labels = data[1].to(device)
 
+            numericalData = data[2]
+
             optimizer.zero_grad()
-            logps = model.forward(inputs)
+            logps = model.forward(inputs, numericalData, device)
+
             loss = criterion(logps, labels)
             loss.backward()
             optimizer.step()
@@ -78,8 +81,9 @@ def class_evaluate(model, test_loader, criterion, device, epoch, writer=None, in
         for i, data in progressEval:
             X = data[0].to(device)
             y = data[1].to(device)
+            z = data[2]
 
-            outputs = model.forward(X)
+            outputs = model.forward(X, z, device)
             val_losses += criterion(outputs, y)
             predicted_classes = torch.max(outputs, 1)[1]  # get class from network's prediction
             trues.extend(y.cpu().detach().numpy())
@@ -94,11 +98,12 @@ def class_evaluate(model, test_loader, criterion, device, epoch, writer=None, in
             cm = metrics.confusion_matrix(trues, preds)
             plot_confusion_matrix(cm, ["Dolphin", "Not dolphin"], "cm-final")
             # print_scores(precision, recall, f1, accuracy, baccuracy, 64)
+
         results = metrics.precision_recall_fscore_support(trues, preds)
         acc = metrics.accuracy_score(trues, preds)
         bacc = balanced_accuracy_score(trues, preds)
-        print(bacc)
-        print(results)
+        # print(bacc)
+        # print(results)
         if writer:
             writer.add_scalar("Accuracy/accuracy", acc, epoch)
             writer.add_scalar("Accuracy/balanced_accuracy", bacc, epoch)

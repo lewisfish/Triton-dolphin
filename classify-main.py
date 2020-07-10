@@ -9,9 +9,9 @@ from torch import nn
 from torch import optim
 import tqdm
 
-from customdata import DolphinDatasetClass
+from customdata import DolphinDatasetClass, getNumericalData
 from engine import train_classify, class_evaluate
-from models import Frankenstein, get_resnet50
+from models import Frankenstein, get_resnet50, trainKNN, get_densenet121, get_vgg13_bn
 
 
 def imageTransfroms(train):
@@ -28,13 +28,11 @@ def imageTransfroms(train):
     return T.Compose(transforms)
 
 
-def get_dataset():
+def get_dataset(batch_size=64):
 
     root = "/data/lm959/imgs/"
     trainfile = "data/train.csv"
     validfile = "data/valid.csv"
-
-    batch_size = 64
 
     dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
     dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), validfile)
@@ -61,23 +59,40 @@ def objective(trial):
     classes = ["dolphin", "not dolphin"]
     num_classes = len(classes)
 
-    model = get_resnet50(num_classes)
+    # model = get_resnet50(num_classes)
+
+    model_name = trial.suggest_categorical("model_name", ["resnet", "vgg", "densenet"])
+
+    trainfile = "data/train.csv"
+    train = getNumericalData(trainfile)
+    X_train, Y_train = train
+    imageargs = {"features": 7, "classify": False}
+    dataargs = (X_train, Y_train)
+
+    if model_name == "vgg":
+        model = Frankenstein(get_vgg13_bn, trainKNN, imageargs, dataargs, num_classes)
+    elif model_name == "resnet":
+        model = Frankenstein(get_resnet50, trainKNN, imageargs, dataargs, num_classes)
+    elif model_name == "densenet":
+        model = Frankenstein(get_densenet121, trainKNN, imageargs, dataargs, num_classes)
+
     model.to(device)
 
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "AdamW", "Adadelta"])
     lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
     optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
     weight = trial.suggest_uniform("weight", 1., 14.)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
-    train_loader, test_loader = get_dataset()
+    train_loader, test_loader = get_dataset(batch_size)
 
     weights = torch.FloatTensor([weight, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weights)
 
-    experiment = f"weights[{weight:.3f},{1.}],lr={lr:.3E},{optimizer_name},WeightedRandomSamplerler"
+    experiment = f"{model_name}, batchsize={batch_size}, weights[{weight:.3f},{1.}], lr={lr:.3E}, {optimizer_name}"
 
-    writer = SummaryWriter(f"dolphin/optuna/{experiment}")
-    num_epochs = 20
+    writer = SummaryWriter(f"dolphin/hyper/{experiment}")
+    num_epochs = 30
     acc = train_classify(trial, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer)
 
     return acc
@@ -85,8 +100,8 @@ def objective(trial):
 
 def main2():
 
-    study = optuna.create_study(direction="maximize", study_name="first trial", storage="sqlite:///example.db")
-    study.optimize(objective, n_trials=40)
+    study = optuna.create_study(direction="maximize", study_name="model-trial", storage="sqlite:///example.db")
+    study.optimize(objective, n_trials=100)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.structs.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.structs.TrialState.COMPLETE]
@@ -123,6 +138,9 @@ def main(args):
     trainfile = "data/train.csv"
     validfile = "data/valid.csv"
 
+    train = getNumericalData(trainfile)
+    X_train, Y_train = train
+
     batch_size = 64
 
     dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
@@ -131,7 +149,7 @@ def main(args):
     # create class weights.
     # easier to do once then read in saved weights as reading images takes
     # too long
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     try:
         class_weights = np.loadtxt("data/class_weights.csv", delimiter=",")
     except OSError:
@@ -150,7 +168,10 @@ def main(args):
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=4,
                                                    drop_last=True)
 
-    model = get_resnet50(num_classes)
+    # model = get_resnet50(num_classes)
+    imageargs = {"features": 7, "classify": False}
+    dataargs = (X_train, Y_train)
+    model = Frankenstein(get_resnet50, trainKNN, imageargs, dataargs, num_classes)
     model.to(device)
 
     # best values as found by optuna {'lr': 0.0005528591422378424, 'optimizer': 'Adam', 'weight': 5.5690176113112395}
@@ -176,9 +197,9 @@ def main(args):
         writer = SummaryWriter(f"dolphin/classify/{experiment}")
         trial = None
         bacc = train_classify(trial, model, criterion, optimizer, data_loader, data_loader_test, device, num_epochs, writer)
-        torch.save(model, "final-model_best.pth")
+        torch.save(model, "final-model.pth")
     else:
-        model = torch.load("final-model_best.pth")
+        model = torch.load("final-model.pth")
         model.eval()
         val_losses = 0
         val_losses = class_evaluate(model, data_loader_test, criterion, device, 0, writer=None, infer=True)
