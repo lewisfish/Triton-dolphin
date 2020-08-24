@@ -30,6 +30,7 @@ def imageTransfroms(train: bool):
     Set of composed transforms
 
     """
+
     transforms = []
     transforms.append(T.Resize((224, 224)))
     if train:
@@ -79,33 +80,34 @@ def objective(trial):
     classes = ["dolphin", "not dolphin"]
     num_classes = len(classes)
 
-    # model = get_resnet50(num_classes)
-
     model_name = trial.suggest_categorical("model_name", ["resnet", "vgg", "densenet"])
 
     trainfile = "data/train.csv"
     train = getNumericalData(trainfile)
     X_train, Y_train = train
-    imageargs = {"features": 7, "classify": False}
+    num_features = trial.suggest_int("nfeatures", 4, 16)
+
+    imageargs = {"features": num_features, "classify": False}
     dataargs = (X_train, Y_train)
 
+    # get model with  correct CNN model
     if model_name == "vgg":
-        model = Frankenstein(get_vgg13_bn, trainKNN, imageargs, dataargs, num_classes)
+        model = Triton(get_vgg13_bn, trainSVM, imageargs, dataargs, num_classes)
     elif model_name == "resnet":
-        model = Frankenstein(get_resnet50, trainKNN, imageargs, dataargs, num_classes)
+        model = Triton(get_resnet50new, trainSVM, imageargs, dataargs, num_classes)
     elif model_name == "densenet":
-        model = Frankenstein(get_densenet121, trainKNN, imageargs, dataargs, num_classes)
+        model = Triton(get_densenet121, trainSVM, imageargs, dataargs, num_classes)
 
     model.to(device)
 
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "AdamW", "Adadelta"])
     lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
     optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
-    weight = trial.suggest_uniform("weight", 1., 14.)
-    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     train_loader, test_loader = get_dataset(batch_size)
 
+    weight = trial.suggest_uniform("weight", 1., 14.)
     weights = torch.FloatTensor([weight, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weights)
 
@@ -113,7 +115,8 @@ def objective(trial):
 
     writer = SummaryWriter(f"dolphin/hyper/{experiment}")
     num_epochs = 30
-    acc = train_classify(trial, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer)
+
+    acc = train_classify(trial, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer, 0)
 
     return acc
 
