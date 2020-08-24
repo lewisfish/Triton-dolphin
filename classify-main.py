@@ -11,10 +11,25 @@ import tqdm
 
 from customdata import DolphinDatasetClass, getNumericalData
 from engine import train_classify, class_evaluate
-from models import Frankenstein, get_resnet50, trainKNN, get_densenet121, get_vgg13_bn
+from models import Triton, get_resnet50, trainKNN, trainSVM, get_densenet121, get_vgg13_bn, get_resnet50new
 
 
-def imageTransfroms(train):
+def imageTransfroms(train: bool):
+    """Set of transforms to use on traing and test data.
+       These trasforms include data augmentations
+
+    Parameters
+    ----------
+
+    train : bool
+        If true then augment the data. If false don't
+
+    Returns
+    -------
+
+    Set of composed transforms
+
+    """
     transforms = []
     transforms.append(T.Resize((224, 224)))
     if train:
@@ -50,7 +65,12 @@ def get_dataset(batch_size=64):
 
 
 def objective(trial):
+    """Function that optuna will optimise. Basically a wrapper/loader for the
+       whole train/evaluate loop.
 
+    """
+
+    torch.manual_seed(1)
     gpu = 1
     device = torch.device(gpu if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
