@@ -7,10 +7,9 @@ from torchvision import transforms as T
 from torch.utils.tensorboard import SummaryWriter
 from torch import nn
 from torch import optim
-import tqdm
 
-from customdata import DolphinDatasetClass, getNumericalData
-from engine import train_classify, class_evaluate
+from customdata import DolphinDatasetClass, getNumericalData, windowDataset
+from engine import train_classify, class_evaluate, infer
 from models import Triton, get_resnet50, trainKNN, trainSVM, get_densenet121, get_vgg13_bn, get_resnet50new
 
 
@@ -121,7 +120,8 @@ def objective(trial):
     return acc
 
 
-def main2():
+def tune():
+    """Function that inits optuna library to tune hyperparameters."""
 
     study = optuna.create_study(direction="maximize", study_name="model-trial", storage="sqlite:///example.db")
     study.optimize(objective, n_trials=100)
@@ -144,61 +144,112 @@ def main2():
         print("    {}: {}".format(key, value))
 
 
-def main(args):
-    # import json
+def train(args):
     torch.manual_seed(1)
+    gpu = 1
+    device = torch.device(gpu if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu)
+
+    classes = ["dolphin", "not dolphin"]
+    num_classes = len(classes)
+
+    model_name = "densenet"
+
+    trainfile = "data/train.csv"
+    train = getNumericalData(trainfile)
+    X_train, Y_train = train
+    imageargs = {"features": 6, "classify": False}
+    dataargs = (X_train, Y_train)
+
+    if model_name == "vgg":
+        model = Triton(get_vgg13_bn, trainSVM, imageargs, dataargs, num_classes)
+    elif model_name == "resnet":
+        model = Triton(get_resnet50new, trainSVM, imageargs, dataargs, num_classes)
+    elif model_name == "densenet":
+        model = Triton(get_densenet121, trainSVM, imageargs, dataargs, num_classes)
+
+    model.to(device)
+
+    lr = 2.8637717478899047e-05
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    weight = 1.3501842034030416
+    batch_size = 32
+
+    train_loader, test_loader = get_dataset(batch_size)
+
+    weights = torch.FloatTensor([weight, 1.]).to(device)
+    criterion = nn.CrossEntropyLoss()
+
+    experiment = f"{model_name}, batchsize={batch_size}, weights[{weight:.3f},{1.}], lr={lr:.3E}, Adam, features={imageargs['features']}, nolossweights"
+
+    writer = SummaryWriter(f"dolphin/best/{experiment}")
+    num_epochs = 30
+
+    # checkpoint = torch.load("checkpoint_state.pth")
+    # model.load_state_dict(checkpoint["model_state_dict"])
+    # optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    # start_epoch = checkpoint["epoch"] + 1
+
+    acc = train_classify(None, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer, 0)
+    torch.save(model, "final-model-triton-svm-nolossweights.pth")
+    # model = torch.load("final-model-frankenstein.pth")
+    # model.eval()
+    # val_losses = 0
+    # class_evaluate(model, test_loader, criterion, device, 0, writer=None, infer=True)
+
+
+def infer(modelname: str, lr=2.864e-5, optimisername="Adam", weight=1.3502, batch_size=32):
+
+    torch.manual_seed(1)
+    gpu = 1  # use only the 2nd GPU
+    device = torch.device(gpu if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu)
+
+    optimizer = getattr(optim, optimiserName)(model.parameters(), lr=lr)
+
+    train_loader, test_loader = get_dataset(batch_size)
+
+    weights = torch.FloatTensor([weight, 1.]).to(device)
+    criterion = nn.CrossEntropyLoss()
+
+    model = torch.load(modelname)
+    model.eval()
+    val_losses = 0
+    class_evaluate(model, test_loader, criterion, device, 0, writer=None, infer=True)
+
+
+def test_video():
+
+    file = "data/clip.mp4"
+    root = "/data/lm959/tmp/patches/"
+    batch_size = 128
+
+    transforms = []
+    transforms.append(T.Resize((224, 224)))
+    transforms.append(T.ToTensor())
+    transforms.append(T.Normalize([.485, .456, .406],
+                                  [.229, .224, .225]))
+    trans = T.Compose(transforms)
+
+    # file, transforms, size, stride
+    dataset = windowDataset(file, trans, 25, 25)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=True)
 
     gpu = 1
     device = torch.device(gpu if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
         torch.cuda.set_device(gpu)
-    print(device)
 
     classes = ["dolphin", "not dolphin"]
     num_classes = len(classes)
 
-    root = "/data/lm959/imgs/"
-    trainfile = "data/train.csv"
-    validfile = "data/valid.csv"
-
-    train = getNumericalData(trainfile)
-    X_train, Y_train = train
-
-    batch_size = 64
-
-    dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
-    dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), validfile)
-
-    # create class weights.
-    # easier to do once then read in saved weights as reading images takes
-    # too long
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-    try:
-        class_weights = np.loadtxt("data/class_weights.csv", delimiter=",")
-    except OSError:
-        labels = []
-        weights = 1000. / torch.tensor([1602, 11688.], dtype=torch.float)
-        for i, (img, targ) in enumerate(tqdm.tqdm(data_loader)):
-            labels.append(targ.item())
-        class_weights = np.array(weights[labels])
-        np.savetxt("data/class_weights.csv", class_weights)
-
-    sampler = torch.utils.data.sampler.WeightedRandomSampler(class_weights, len(dataset), replacement=True)
-    # now use dataloader with sampler
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4,
-                                              drop_last=True, sampler=sampler)
-
-    data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=4,
-                                                   drop_last=True)
-
-    # model = get_resnet50(num_classes)
-    imageargs = {"features": 7, "classify": False}
-    dataargs = (X_train, Y_train)
-    model = Frankenstein(get_resnet50, trainKNN, imageargs, dataargs, num_classes)
+    model = get_densenet121(num_classes, classify=True)
     model.to(device)
 
-    # best values as found by optuna {'lr': 0.0005528591422378424, 'optimizer': 'Adam', 'weight': 5.5690176113112395}
-    # penalize not dolphin class
+    model = torch.load("final-model-densenet.pth")
+    model.eval()
     weight = torch.FloatTensor([5.5690176113112395, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weight)
     lr = 0.0005528591422378424
@@ -238,8 +289,17 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--continue_train", action="store_true",
                         default=False, help="For continuing training.")
     parser.add_argument("-i", "--evaluate", action="store_true", help="Infere on a bunch of images.")
+    parser.add_argument("-o", "--optimise", action="store_true", help="Tune the hyperparameters of the chosen model.")
+    parser.add_argument("-t", "--train", action="store_true", help="Train the chosen model.")
 
     args = parser.parse_args()
 
-    main(args)
-    # main2()
+    if args.evaluate:
+        infer()
+    elif args.continue_train:
+        train(args)
+    elif args.tune:
+        tune()
+    else:
+        print("Choose a mode!")
+    # test_video()
