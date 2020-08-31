@@ -4,8 +4,10 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score
 import torch
 from tqdm import tqdm
 
+__all__ = ["train_Triton", "train_CNN", "evaluate_Triton", "evaluate_CNN"]
 
-def train_classify(trial, model, criterion, optimizer, train_loader, test_loader, device, epochs, writer, start_epoch=0) -> float:
+
+def train_Triton(trial, model, criterion, optimizer, train_loader, test_loader, device, epochs, writer, start_epoch=0) -> float:
     """Train function for given model using given criterion, and optimizer.
        Writes out to tensorboard and supports optuna hyperparameter tuning
 
@@ -63,7 +65,97 @@ def train_classify(trial, model, criterion, optimizer, train_loader, test_loader
             inputs = data[0].to(device)
             labels = data[1].to(device)
 
-            # numericalData = data[2]
+            numericalData = data[2]
+
+            optimizer.zero_grad()
+            logps = model.forward(inputs, numericalData, device)
+
+            loss = criterion(logps, labels)
+            loss.backward()
+            optimizer.step()
+            current_loss = loss.item()
+            total_loss += current_loss
+            progress.set_description(f"Loss: {total_loss / (i + 1):.4f}")
+            writer.add_scalar("Loss", total_loss / (i + 1), epoch * len(train_loader) + i)
+
+        val_losses, bacc = evaluate_Triton(model, test_loader, criterion, device, epoch, writer)
+
+        print(f"Epoch {epoch+1}/{epochs}, training loss: {total_loss/batches}, validation loss: {val_losses/val_batches}")
+
+        losses.append(total_loss / batches)  # for plotting learning curve
+        writer.add_scalar("Loss/train", total_loss / batches, epoch)
+        writer.add_scalar("Loss/Test", val_losses / val_batches, epoch)
+        writer.flush()
+        torch.save({'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict()
+                    }, "checkpoint_state.pth")
+        if trial is not None:
+            trial.report(bacc, epoch)
+
+        # Handle pruning based on the intermediate value.
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+    return bacc
+
+
+def train_CNN(trial, model, criterion, optimizer, train_loader, test_loader, device, epochs, writer, start_epoch=0) -> float:
+    """Train function for given model using given criterion, and optimizer.
+       Writes out to tensorboard and supports optuna hyperparameter tuning
+
+
+    Parameters
+    ----------
+
+    trial : ?
+
+
+    model : ?
+        The model to train
+
+    criterion : ?
+        The criterion to use as a loss function to asses the performance of the
+        model being trained.
+
+    optimizer : ?
+        The learning rate optimizer.
+
+    train_loader : ?
+        The Pytorch data loader that loads the training data.
+
+    test_loader : ?
+        The Pytorch data loader that loads the evaluation data.
+
+    device : ?
+        Which device the model is being trained on.
+
+    epochs : int
+        The number of epochs to train the model for.
+
+    writer : ?
+        Tensorboard instance to write to.
+
+    Returns
+    -------
+
+    bacc : float
+        The balanced accuracy of the model on the evaluation data.
+
+    """
+
+    model.train()
+    losses = []
+    batches = len(train_loader)
+    val_batches = len(test_loader)
+
+    for epoch in range(start_epoch, epochs):
+        total_loss = 0
+        progress = tqdm(enumerate(train_loader), desc="Loss: ", total=batches)
+        model.train()
+        for i, data in progress:
+
+            inputs = data[0].to(device)
+            labels = data[1].to(device)
 
             optimizer.zero_grad()
             logps = model.forward(inputs)
