@@ -22,20 +22,21 @@ __all__ = ["DolphinDataset", "DolphinDatasetClass", "getNumericalData"]
 # just true of the train, test, validation sets.
 
 
-def getNumericalData(filename: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def getNumericalData(filename: str, hdbscan=False) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Function read and processes the numerical data for training on.
-
+    
     Parameters
     ----------
-
-    filename: str
+    filename : str
         Name of file to read in
 
+    hdbscan : bool, optional
+        Description
+    
     Returns
     -------
-
-    Tuple: Tuple[pd.DataFrame, pd.DataFrame]
-
+    Tuple[pd.DataFrame, pd.DataFrame]
+    
     """
 
     df = pd.read_csv(filename)
@@ -45,7 +46,11 @@ def getNumericalData(filename: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     train.reset_index(drop=True, inplace=True)
 
     # get pertinent parts
-    X_train = train[["velocity", "hdbscan"]]
+    if hdbscan:
+        X_train = train[["velocity", "hdbscan"]]
+    else:
+        X_train = train[["velocity", "kmeans"]]
+
     Y_train = train["labels"]
     Y_train = Y_train.to_frame("labels")
 
@@ -61,7 +66,7 @@ def getNumericalData(filename: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     return (X_train, Y_train)
 
 
-class DolphinDataset(object):
+class DolphinDataset(Dataset):
     """docstring for DolphinDataset for purpiose of object detection"""
     def __init__(self, root, transforms, file, allLabels=False):
         super(DolphinDataset, self).__init__()

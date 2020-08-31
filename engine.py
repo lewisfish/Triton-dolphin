@@ -168,7 +168,7 @@ def train_CNN(trial, model, criterion, optimizer, train_loader, test_loader, dev
             progress.set_description(f"Loss: {total_loss / (i + 1):.4f}")
             writer.add_scalar("Loss", total_loss / (i + 1), epoch * len(train_loader) + i)
 
-        val_losses, bacc = class_evaluate(model, test_loader, criterion, device, epoch, writer)
+        val_losses, bacc = evaluate_CNN(model, test_loader, criterion, device, epoch, writer)
 
         print(f"Epoch {epoch+1}/{epochs}, training loss: {total_loss/batches}, validation loss: {val_losses/val_batches}")
 
@@ -189,7 +189,7 @@ def train_CNN(trial, model, criterion, optimizer, train_loader, test_loader, dev
     return bacc
 
 
-def class_evaluate_Triton(model, test_loader, criterion, device, epoch, writer=None, infer=False):
+def evaluate_Triton(model, test_loader, criterion, device, epoch, writer=None, infer=False):
 
     val_losses = 0
     trues = []
@@ -236,7 +236,7 @@ def class_evaluate_Triton(model, test_loader, criterion, device, epoch, writer=N
     return val_losses, bacc
 
 
-def class_evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None, infer=False):
+def evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None, infer=False):
 
     val_losses = 0
     trues = []
@@ -266,7 +266,7 @@ def class_evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None
         results = metrics.precision_recall_fscore_support(trues, preds)
         acc = metrics.accuracy_score(trues, preds)
         bacc = balanced_accuracy_score(trues, preds)
-        print(bacc)
+
         if writer:
             writer.add_scalar("Accuracy/accuracy", acc, epoch)
             writer.add_scalar("Accuracy/balanced_accuracy", bacc, epoch)
