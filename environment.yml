@@ -10,5 +10,4 @@ dependencies:
   - opencv
   - pandas
   - scikit-image
-  - pycocotools
   - scikit-learn
