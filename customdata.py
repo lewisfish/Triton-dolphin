@@ -172,7 +172,7 @@ class DolphinDataset(Dataset):
         return len(self.data)
 
 
-class DolphinDatasetClass(object):
+class DolphinDatasetClass(Dataset):
     """docstring for DolphinDatasetClass for image classification"""
     def __init__(self, root, transforms, file, allLabels=False):
         super(DolphinDatasetClass, self).__init__()
