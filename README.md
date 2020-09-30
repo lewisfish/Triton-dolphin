@@ -15,7 +15,7 @@ usage: classify-main.py [-h] [-e N] [-c] [-i] [-o] [-t] [-mp MODELPATH]
 
 PyTorch pipeline for train and detection of 2 image classes, Dolphin and Not Dolphin.
 
-optional arguments:
+Optional arguments:\
   -h, --help            show this help message and exit.\
   -e N, --epochs N      number of epochs to train for (default: 10).\
   -c, --continue_train  For continuing training.\
@@ -32,6 +32,17 @@ optional arguments:
   -f FEATURES, --features FEATURES Number of features to use from CNN in Triton model.\
   -test                 If supplied then run on test data instead of validation data.\
   -s SEED, --seed SEED  Set seed for the current run. Default is 1.
+
+### Example
+
+To train a CNN:
+  - `python classify-main.py -t --epochs 30 --modelpath cnn-model.pth --arch resnet --type CNN --optim Adam -lr 1e-4 --batchsize 16`
+  
+To infer on the Triton model with DenseNet at triton-model.pth on the test set:
+  - `python classify-main.py -i --modelpath triton-model.pth --arch densenet --modeltype Triton --batchsize 32 --features 6 -test`
+
+To tune the hyperparmeters of the model:
+  - `python classify-main.py -o` 
 
 ## Installation
 
