@@ -16,33 +16,22 @@ usage: classify-main.py [-h] [-e N] [-c] [-i] [-o] [-t] [-mp MODELPATH]
 PyTorch pipeline for train and detection of 2 image classes, Dolphin and Not Dolphin.
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -e N, --epochs N      number of epochs to train for (default: 10)
-  -c, --continue_train  For continuing training.
-  -i, --evaluate        Infere on a bunch of images.
-  -o, --optimise        Tune the hyperparameters of the chosen model.
-  -t, --train           Train the chosen model.
-  -mp MODELPATH, --modelpath MODELPATH
-                        Path to saved model.
-  -a {resnet,densenet,vgg}, --arch {resnet,densenet,vgg}
-                        Choice of CNN model for either CNN or Triton model.
-  --type {CNN,Triton}   Choice to run CNN or full Triton model.
-  -lr LR                Learning rate for optimiser
-  --optim {Adam,AdamW,Adadelta,SGD}
-                        Choice of optimiser.
-  -w WEIGHT, --weight WEIGHT
-                        Weight to bias loss function. Only biases the Dolphin
-                        class.
-  -bs BATCHSIZE, --batchsize BATCHSIZE
-                        Batchsize for training, evaluation etc.
-  -f FEATURES, --features FEATURES
-                        Number of features to use from CNN in Triton model.
-  -test                 If supplied then run on test data instead of
-                        validation data.
+  -h, --help            show this help message and exit.\
+  -e N, --epochs N      number of epochs to train for (default: 10).\
+  -c, --continue_train  For continuing training.\
+  -i, --evaluate        Infere on a bunch of images.\
+  -o, --optimise        Tune the hyperparameters of the chosen model.\
+  -t, --train           Train the chosen model.\
+  -mp MODELPATH, --modelpath MODELPATH Path to saved model.\
+  -a {resnet,densenet,vgg}, --arch {resnet,densenet,vgg} Choice of CNN model for either CNN or Triton model.\
+  --type {CNN,Triton}   Choice to run CNN or full Triton model.\
+  -lr LR                Learning rate for optimiser\
+  --optim {Adam,AdamW,Adadelta,SGD} Choice of optimiser.\
+  -w WEIGHT, --weight WEIGHT Weight to bias loss function. Only biases the Dolphin class.\
+  -bs BATCHSIZE, --batchsize BATCHSIZE Batchsize for training, evaluation etc.\
+  -f FEATURES, --features FEATURES Number of features to use from CNN in Triton model.\
+  -test                 If supplied then run on test data instead of validation data.\
   -s SEED, --seed SEED  Set seed for the current run. Default is 1.
-
-
-
 
 ## Installation
 
