@@ -3,76 +3,19 @@ import argparse
 import numpy as np
 import optuna
 import torch
-from torchvision import transforms as T
+import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from torch import nn
 from torch import optim
 
-from customdata import DolphinDatasetClass, getNumericalData, windowDataset
+from customdata import DolphinDatasetClass, getNumericalData
 from engine import train_CNN, evaluate_CNN, train_Triton, evaluate_Triton
-from models import Triton, get_resnet50, trainKNN, trainSVM, get_densenet121, get_vgg13_bn, get_resnet50new
-
-
-def imageTransfroms(train: bool):
-    """Set of transforms to use on traing and test data.
-       These trasforms include data augmentations
-
-    Parameters
-    ----------
-
-    train : bool
-        If true then augment the data. If false don't
-
-    Returns
-    -------
-
-    Set of composed transforms
-
-    """
-
-    transforms = []
-    transforms.append(T.Resize((224, 224)))
-    if train:
-        transforms.append(T.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.15))
-        transforms.append(T.RandomRotation(180))
-        transforms.append(T.RandomHorizontalFlip())
-
-    transforms.append(T.ToTensor())
-    transforms.append(T.Normalize([.485, .456, .406],
-                                  [.229, .224, .225]))
-    return T.Compose(transforms)
-
-
-def get_dataset(batch_size=64, test=False):
-
-    root = "/data/lm959/imgs/"
-    trainfile = "data/train.csv"
-    validfile = "data/valid.csv"
-    testfile = "data/test.csv"
-
-    dataset = DolphinDatasetClass(root, imageTransfroms(train=True), trainfile)
-    if test:
-        dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), testfile)
-    else:
-        dataset_test = DolphinDatasetClass(root, imageTransfroms(train=False), validfile)
-
-    class_weights = np.loadtxt("data/class_weights.csv", delimiter=",")
-
-    sampler = torch.utils.data.sampler.WeightedRandomSampler(class_weights, len(dataset), replacement=True)
-
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=6,
-                                               drop_last=True, sampler=sampler)
-
-    test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=4,
-                                              drop_last=True)
-
-    return train_loader, test_loader
+from utils import plot_confusion_matrix, select_model, get_dataset, imageTransfroms
 
 
 def objective(trial):
     """Function that optuna will optimise. Basically a wrapper/loader for the
        whole train/evaluate loop.
-
     """
 
     torch.manual_seed(1)
@@ -84,25 +27,12 @@ def objective(trial):
     classes = ["dolphin", "not dolphin"]
     num_classes = len(classes)
 
-    model_name = trial.suggest_categorical("model_name", ["resnet", "vgg", "densenet"])
+    cnn_arch = trial.suggest_categorical("cnn_arch", ["resnet", "vgg", "densenet"])
 
-    trainfile = "data/train.csv"
-    train = getNumericalData(trainfile)
-    X_train, Y_train = train
-    num_features = trial.suggest_int("nfeatures", 4, 16)
+    modeltype = "Triton"
+    features = trial.suggest_int("features", 4, 16)
 
-    imageargs = {"features": num_features, "classify": False}
-    dataargs = (X_train, Y_train)
-
-    # get model with  correct CNN model
-    if model_name == "vgg":
-        model = Triton(get_vgg13_bn, trainSVM, imageargs, dataargs, num_classes)
-    elif model_name == "resnet":
-        model = Triton(get_resnet50new, trainSVM, imageargs, dataargs, num_classes)
-    elif model_name == "densenet":
-        model = Triton(get_densenet121, trainSVM, imageargs, dataargs, num_classes)
-
-    model.to(device)
+    model = select_model(modeltype, cnn_arch, features, device)
 
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "AdamW", "Adadelta"])
     lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
@@ -111,13 +41,13 @@ def objective(trial):
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     train_loader, test_loader = get_dataset(batch_size)
 
-    weight = trial.suggest_uniform("weight", 1., 14.)
+    weight = trial.suggest_uniform("weight", 1., 5.)
     weights = torch.FloatTensor([weight, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weights)
 
-    experiment = f"{model_name}, batchsize={batch_size}, weights[{weight:.3f},{1.}], lr={lr:.3E}, {optimizer_name}"
+    experiment = f"batchsize={batch_size}, weight={weight:.3f}, lr={lr:.3E}, {optimizer_name}, features={features}, arch={cnn_arch}"
 
-    writer = SummaryWriter(f"dolphin/hyper/{experiment}")
+    writer = SummaryWriter(f"dolphin/triton-resnet-knn/{experiment}")
     num_epochs = 30
 
     acc = train_Triton(trial, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer, 0)
@@ -130,7 +60,7 @@ def tune(studyname: str, dbpath: str, trials: int):
 
     dbpath = "sqlite:///" + dbpath + ".db"
     study = optuna.create_study(direction="maximize", study_name=studyname, storage=dbpath)
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=trials)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.structs.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.structs.TrialState.COMPLETE]
@@ -150,8 +80,19 @@ def tune(studyname: str, dbpath: str, trials: int):
         print("    {}: {}".format(key, value))
 
 
-def train(args):
-    torch.manual_seed(1)
+def train(args: argparse.Namespace):
+    """Train a model
+
+    Parameters
+    ----------
+    args : args.Namespace
+        Collection of user defined cmdline variables.
+    """
+
+    # seeds used in finding best model
+    seed = args.seed
+    torch.manual_seed(seed)
+
     gpu = 1
     device = torch.device(gpu if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
@@ -160,45 +101,33 @@ def train(args):
     classes = ["dolphin", "not dolphin"]
     num_classes = len(classes)
 
-    model_name = "densenet"
+    cnn_arch = args.arch
+    modeltype = args.type
+    features = args.features
 
-    trainfile = "data/train.csv"
-    train = getNumericalData(trainfile)
-    X_train, Y_train = train
-    imageargs = {"features": 6, "classify": False}
-    dataargs = (X_train, Y_train)
+    model = select_model(modeltype, cnn_arch, features, device)
 
-    if model_name == "vgg":
-        model = Triton(get_vgg13_bn, trainSVM, imageargs, dataargs, num_classes)
-    elif model_name == "resnet":
-        model = Triton(get_resnet50new, trainSVM, imageargs, dataargs, num_classes)
-    elif model_name == "densenet":
-        model = Triton(get_densenet121, trainSVM, imageargs, dataargs, num_classes)
-
-    model.to(device)
-
-    lr = 2.8637717478899047e-05
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    weight = 1.3501842034030416
-    batch_size = 32
+    lr = args.lr
+    optimizer = getattr(optim, args.optim)(model.parameters(), lr=lr)
+    weight = args.weight
+    batch_size = args.batchsize
 
     train_loader, test_loader = get_dataset(batch_size)
 
     weights = torch.FloatTensor([weight, 1.]).to(device)
     criterion = nn.CrossEntropyLoss()
 
-    experiment = f"{model_name}, batchsize={batch_size}, weights[{weight:.3f},{1.}], lr={lr:.3E}, Adam, features={imageargs['features']}, BEST_Triton_SVM_Final"
+    experiment = f"{cnn_arch}, batchsize={batch_size}, weights[{weight:.3f},{1.}], lr={lr:.3E}, {optimizer}, features={features}, seed={seed}"
 
-    writer = SummaryWriter(f"dolphin/final-SVM/{experiment}")
+    writer = SummaryWriter(f"runs/{experiment}")#average-triton-results/{experiment}
     num_epochs = 30
 
-    # checkpoint = torch.load("checkpoint_state.pth")
-    # model.load_state_dict(checkpoint["model_state_dict"])
-    # optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    # start_epoch = checkpoint["epoch"] + 1
+    if modeltype == "Triton":
+        acc = train_Triton(None, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer, 0)
+    elif modeltype == "CNN":
+        acc = train_CNN(None, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer, 0)
 
-    acc = train_Triton(None, model, criterion, optimizer, train_loader, test_loader, device, num_epochs, writer, 0)
-    torch.save(model, "final-model-triton-SVM.pth")
+    torch.save(model, f"{args.modelpath}")
 
 
 def infer(modelpath: str, cnn_arch: str, modeltype: str, weight: float,
@@ -235,36 +164,7 @@ def infer(modelpath: str, cnn_arch: str, modeltype: str, weight: float,
     weights = torch.FloatTensor([weight, 1.]).to(device)
     criterion = nn.CrossEntropyLoss(weight=weights)
 
-    # setup CNN or Triton
-    if modeltype == "CNN":
-        if cnn_arch == "vgg":
-            model = get_vgg13_bn(2)
-        elif cnn_arch == "resnet":
-            model = get_resnet50new(2)
-        elif cnn_arch == "densenet":
-            model = get_densenet121(2)
-    elif modeltype == "Triton":
-        classes = ["dolphin", "not dolphin"]
-        num_classes = len(classes)
-
-        # get preprocessing data
-        trainfile = "data/train.csv"
-        train = getNumericalData(trainfile)
-        X_train, Y_train = train
-        imageargs = {"features": features, "classify": False}
-        dataargs = (X_train, Y_train)
-
-        # create Triton model woth correct CNN arch
-        if cnn_arch == "vgg":
-            model = Triton(get_vgg13_bn, trainSVM, imageargs, dataargs, num_classes)
-        elif cnn_arch == "resnet":
-            model = Triton(get_resnet50new, trainSVM, imageargs, dataargs, num_classes)
-        elif cnn_arch == "densenet":
-            model = Triton(get_densenet121, trainSVM, imageargs, dataargs, num_classes)
-
-    else:
-        print("Model Type not implemented")
-        raise NotImplementedError
+    model = select_model(modeltype, cnn_arch, features, device)
 
     # load pretrained model for infer
     model = torch.load(modelpath)
@@ -273,13 +173,17 @@ def infer(modelpath: str, cnn_arch: str, modeltype: str, weight: float,
 
     # infer
     if modeltype == "CNN":
-        _, bacc = evaluate_CNN(model, test_loader, criterion, device, 0, writer=None, infer=True)
+        _, bacc, cm = evaluate_CNN(model, test_loader, criterion, device, 0, writer=None, infer=True)
+        cmname = "CNN-cm"
     elif modeltype == "Triton":
-        _, bacc = evaluate_Triton(model, test_loader, criterion, device, 0, writer=None, infer=True)
+        _, bacc, cm = evaluate_Triton(model, test_loader, criterion, device, 0, writer=None, infer=True)
+        cmname = "Triton-cm"
     else:
         print("Model Type not implemented")
         raise NotImplementedError
+
     print(bacc)
+    plot_confusion_matrix(cm, ["Dolphin", "Not Dolphin"], "triton-cm", title='cm')
 
 
 if __name__ == '__main__':
@@ -296,29 +200,30 @@ if __name__ == '__main__':
     parser.add_argument("-o", "--optimise", action="store_true", help="Tune the hyperparameters of the chosen model.")
     parser.add_argument("-t", "--train", action="store_true", help="Train the chosen model.")
 
-    parser.add_argument("--modelpath", type=str, default="model.pth", help="Path to saved model.")
-    parser.add_argument("--model", type=str, choices=["resnet", "densenet", "vgg"], help="Choice of CNN model for either CNN or Triton model.")
+    parser.add_argument("-mp", "--modelpath", type=str, default="model.pth", help="Path to saved model.")
+    parser.add_argument("-a", "--arch", type=str, choices=["resnet", "densenet", "vgg"], help="Choice of CNN model for either CNN or Triton model.")
     parser.add_argument("--type", type=str, choices=["CNN", "Triton"], help="Choice to run CNN or full Triton model.")
 
     parser.add_argument("-lr", type=float, default=1e-3, help="Learning rate for optimiser")
     parser.add_argument("--optim", type=str, choices=["Adam", "AdamW", "Adadelta", "SGD"], help="Choice of optimiser.")
-    parser.add_argument("-w", "--weight", type=float, default=2.0, help="Weight to bias loss function. Only biases the Dolphin class.")
+    parser.add_argument("-w", "--weight", type=float, default=1.0, help="Weight to bias loss function. Only biases the Dolphin class.")
     parser.add_argument("-bs", "--batchsize", type=int, default=32, help="Batchsize for training, evaluation etc.")
     parser.add_argument("-f", "--features", type=int, default=6, help="Number of features to use from CNN in Triton model.")
 
     parser.add_argument("-test", action="store_true", help="If supplied then run on test data instead of validation data.")
+    parser.add_argument("-s", "--seed", type=int, default=1, help="Set seed for the current run. Default is 1.")
 
     args = parser.parse_args()
 
     if args.evaluate:
-        infer(modelpath=args.modelpath, model_name=args.model,
+        infer(modelpath=args.modelpath, cnn_arch=args.arch,
               modeltype=args.type, weight=args.weight,
               batch_size=args.batchsize, test=args.test,
               features=args.features)
     elif args.continue_train or args.train:
         train(args)
     elif args.optimise:
-        tune("triton-best-cnn", "triton-cnn", 35)
+        tune(studyname="best-triton-resnet-knn", dbpath="triton-resnet-knn", trials=50)
     else:
         print("Choose a mode!")
     # test_video()

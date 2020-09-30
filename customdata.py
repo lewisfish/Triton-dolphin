@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Tuple
 
+import av
 import cv2
 import numpy as np
 import pandas as pd
@@ -9,10 +10,11 @@ from PIL import Image
 from sklearn.preprocessing import minmax_scale
 from sklearn.utils import shuffle
 import torch
-from torchvision import transforms
+import torch.nn.functional as F
+from torch.utils.data import Dataset
+from torchvision import transforms, datasets
 
-
-__all__ = ["DolphinDataset", "DolphinDatasetClass", "getNumericalData"]
+__all__ = ["DolphinDataset", "DolphinDatasetClass", "getNumericalData", "ImageFolderWithPaths"]
 
 # example data item
 # 錄製_2019_11_28_12_05_07_124.mp4, 30440, 749, 550, 758, 556, 10
@@ -120,7 +122,7 @@ class DolphinDataset(Dataset):
         _, image = cap.read()
         cap.release()
 
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)/255.0
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         ymax, xmax = image.shape[0], image.shape[1]
 
         target = {}
@@ -241,11 +243,11 @@ class DolphinDatasetClass(Dataset):
 
         ymax, xmax = image.shape[0], image.shape[1]
 
-        top = max(0, top-5)
-        bottom = min(ymax, bottom+5)
+        top = max(0, top - 5)
+        bottom = min(ymax, bottom + 5)
 
-        left = max(0, left-5)
-        right = min(xmax, right+5)
+        left = max(0, left - 5)
+        right = min(xmax, right + 5)
 
         image = image[top:bottom, left:right, :]
 
@@ -270,3 +272,103 @@ class DolphinDatasetClass(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+
+class windowDataset(Dataset):
+    """This dataset returns patches from still frame in a video feed. Currently only i-frames."""
+    def __init__(self, file, transforms, size, stride):
+        super(windowDataset, self).__init__()
+        self.file = file
+        self.transforms = transforms
+        self.size = size
+        self.stride = stride
+        self.xpos = 0
+        self.ypos = 0
+        self.imageGen = self.getNextFrame()
+        self.image, self.framenum = next(self.imageGen)
+        self.numFrames = self.getNumberFrames()
+
+    def __getitem__(self, idx):
+
+        framenum = self.framenum
+        image = self.image[self.ypos:self.ypos + self.size, self.xpos:self.xpos + self.size, :]
+
+        # apply transforms if any
+        if self.transforms:
+            PIL_image = Image.fromarray(image)
+            image = self.transforms(PIL_image)
+        xpos, ypos = self.xpos, self.ypos
+        # update parameters for next image
+        self.xpos += self.stride
+        if self.xpos >= self.image.shape[1]:
+            self.xpos = 0
+            self.ypos += self.stride
+        if self.ypos >= self.image.shape[0]:
+            self.image, self.framenum = next(self.imageGen)
+            self.xpos, self.ypos = 0, 0
+
+        return image, framenum, torch.tensor([xpos, ypos])
+
+    def __len__(self):
+        return int(self.numFrames * self.image.shape[0] * self.image.shape[1] / self.stride**2)
+
+    def getNextFrame(self):
+        with av.open(self.file) as container:
+            # Signal that we only want to look at keyframes.
+            stream = container.streams.video[0]
+            stream.codec_context.skip_frame = 'NONKEY'
+            for frame in container.decode(stream):
+                # convert and crop frame
+                pts = frame.pts
+                image = frame.to_image()
+                image = np.array(image)
+                # crop image to prespecified size
+                image = image[130:1030, 0:1990, :]
+                image = self.padImage(image)
+                yield image, pts
+
+    def padImage(self, image):
+        # get padding if required
+        if image.shape[1] // self.stride != image.shape[1] / self.stride:
+            leftpad = (image.shape[1] // self.stride * self.stride + self.size) - image.shape[1]
+            rightpad = leftpad // 2 if leftpad % 2 == 0 else leftpad // 2 + 1
+            leftpad = leftpad // 2
+        else:
+            leftpad, rightpad = 0, 0
+
+        if image.shape[0] // self.stride != image.shape[0] / self.stride:
+            toppad = (image.shape[0] // self.stride * self.stride + self.size) - image.shape[0]
+            bottompad = toppad // 2 if toppad % 2 == 0 else toppad // 2 + 1
+            toppad = toppad // 2
+        else:
+            toppad, bottompad = 0, 0
+
+        padding = ((toppad, bottompad), (leftpad, rightpad), (0, 0))
+        image = np.pad(image, padding)
+
+        return image
+
+    def getNumberFrames(self):
+        with av.open(self.file) as container:
+            # Signal that we only want to look at keyframes.
+            stream = container.streams.video[0]
+            stream.codec_context.skip_frame = 'NONKEY'
+            for i, _ in enumerate(container.decode(stream)):
+                continue
+        return i + 1
+
+
+class ImageFolderWithPaths(datasets.ImageFolder):
+    """Custom dataset that includes image file paths. Extends
+    torchvision.datasets.ImageFolder
+    """
+
+    # override the __getitem__ method. this is the method that dataloader calls
+    def __getitem__(self, index):
+        # this is what ImageFolder normally returns
+        original_tuple = super(ImageFolderWithPaths, self).__getitem__(index)
+        # the image file path
+        path = str(Path(self.imgs[index][0]).stem)
+        # make a new tuple that includes original and the path
+        tuple_with_path = (original_tuple + (path,))
+        return tuple_with_path

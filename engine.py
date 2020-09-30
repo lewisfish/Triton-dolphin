@@ -8,47 +8,49 @@ __all__ = ["train_Triton", "train_CNN", "evaluate_Triton", "evaluate_CNN"]
 
 
 def train_Triton(trial, model, criterion, optimizer, train_loader, test_loader, device, epochs, writer, start_epoch=0) -> float:
-    """Train function for given model using given criterion, and optimizer.
+    """Train function for Triton model using given criterion, and optimizer.
        Writes out to tensorboard and supports optuna hyperparameter tuning
-
 
     Parameters
     ----------
-
     trial : ?
-
-
+        trial object from optuna library. If none then were not optimising hyperparameters.
     model : ?
         The model to train
 
-    criterion : ?
+    criterion : nn.Module._Loss
         The criterion to use as a loss function to asses the performance of the
         model being trained.
 
-    optimizer : ?
+    optimizer : torch.optim.Optimizer
         The learning rate optimizer.
 
-    train_loader : ?
+    train_loader : torch.utils.data.dataloader.DataLoader
         The Pytorch data loader that loads the training data.
 
-    test_loader : ?
+    test_loader : torch.utils.data.dataloader.DataLoader
         The Pytorch data loader that loads the evaluation data.
 
-    device : ?
+    device : torch.device
         Which device the model is being trained on.
 
     epochs : int
         The number of epochs to train the model for.
 
-    writer : ?
+    writer : torch.utils.tensorboard.writer.SummaryWriter
         Tensorboard instance to write to.
+
+    start_epoch : int, optional
+        Epoch to start at
 
     Returns
     -------
-
     bacc : float
         The balanced accuracy of the model on the evaluation data.
 
+    Raises
+    ------
+    optuna.exceptions.TrialPruned
     """
 
     model.train()
@@ -99,48 +101,54 @@ def train_Triton(trial, model, criterion, optimizer, train_loader, test_loader, 
     return bacc
 
 
-def train_CNN(trial, model, criterion, optimizer, train_loader, test_loader, device, epochs, writer, start_epoch=0) -> float:
-    """Train function for given model using given criterion, and optimizer.
+def train_CNN(trial, model, criterion, optimizer: torch.optim.Optimizer,
+              train_loader: torch.utils.data.dataloader.DataLoader,
+              test_loader: torch.utils.data.dataloader.DataLoader,
+              device: torch.device, epochs: int,
+              writer: torch.utils.tensorboard.writer.SummaryWriter, start_epoch=0) -> float:
+    """Train function for CNN model using given criterion, and optimizer.
        Writes out to tensorboard and supports optuna hyperparameter tuning
-
 
     Parameters
     ----------
-
     trial : ?
-
-
+        trial object from optuna library. If none then were not optimising hyperparameters.
     model : ?
         The model to train
 
-    criterion : ?
+    criterion : nn.Module._Loss
         The criterion to use as a loss function to asses the performance of the
         model being trained.
 
-    optimizer : ?
+    optimizer : torch.optim.Optimizer
         The learning rate optimizer.
 
-    train_loader : ?
+    train_loader : torch.utils.data.dataloader.DataLoader
         The Pytorch data loader that loads the training data.
 
-    test_loader : ?
+    test_loader : torch.utils.data.dataloader.DataLoader
         The Pytorch data loader that loads the evaluation data.
 
-    device : ?
+    device : torch.device
         Which device the model is being trained on.
 
     epochs : int
         The number of epochs to train the model for.
 
-    writer : ?
+    writer : torch.utils.tensorboard.writer.SummaryWriter
         Tensorboard instance to write to.
+
+    start_epoch : int, optional
+        Epoch to start at
 
     Returns
     -------
-
     bacc : float
         The balanced accuracy of the model on the evaluation data.
 
+    Raises
+    ------
+    optuna.exceptions.TrialPruned
     """
 
     model.train()
@@ -190,6 +198,31 @@ def train_CNN(trial, model, criterion, optimizer, train_loader, test_loader, dev
 
 
 def evaluate_Triton(model, test_loader, criterion, device, epoch, writer=None, infer=False):
+    """Evaluate how well the model has learned.
+
+    Parameters
+    ----------
+    model : ?
+        The model to train
+    test_loader : torch.utils.data.dataloader.DataLoader
+        The Pytorch data loader that loads the evaluation data.
+    criterion : nn.Module._Loss
+        The criterion to use as a loss function to asses the performance of the
+        model being trained.
+    device : torch.device
+        Which device the model is being trained on.
+    epoch : TYPE
+        Current epoch
+    writer : torch.utils.tensorboard.writer.SummaryWriter
+        Tensorboard instance to write to.
+    infer : bool, optional
+        If true then calculate performance on validation or test sets and return cm and bacc.
+
+    Returns
+    -------
+    TYPE
+        Description
+    """
 
     val_losses = 0
     trues = []
@@ -233,10 +266,38 @@ def evaluate_Triton(model, test_loader, criterion, device, epoch, writer=None, i
             writer.add_scalar("F1/Not_dolphin", results[2][1], epoch)
             writer.flush()
 
-    return val_losses, bacc
+    if infer:
+        return val_losses, bacc, cm
+    else:
+        return val_losses, bacc
 
 
 def evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None, infer=False):
+    """Evaluate how well the model has learned.
+
+    Parameters
+    ----------
+    model : ?
+        The model to train
+    test_loader : torch.utils.data.dataloader.DataLoader
+        The Pytorch data loader that loads the evaluation data.
+    criterion : nn.Module._Loss
+        The criterion to use as a loss function to asses the performance of the
+        model being trained.
+    device : torch.device
+        Which device the model is being trained on.
+    epoch : TYPE
+        Current epoch
+    writer : torch.utils.tensorboard.writer.SummaryWriter
+        Tensorboard instance to write to.
+    infer : bool, optional
+        If true then calculate performance on validation or test sets and return cm and bacc.
+
+    Returns
+    -------
+    TYPE
+        Description
+    """
 
     val_losses = 0
     trues = []
@@ -251,7 +312,6 @@ def evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None, infe
         for i, data in progressEval:
             X = data[0].to(device)
             y = data[1].to(device)
-            # z = data[2]
 
             outputs = model.forward(X)
             val_losses += criterion(outputs, y)
@@ -261,7 +321,6 @@ def evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None, infe
         if infer:
             print(metrics.classification_report(trues, preds))
             cm = metrics.confusion_matrix(trues, preds)
-            print(cm)
 
         results = metrics.precision_recall_fscore_support(trues, preds)
         acc = metrics.accuracy_score(trues, preds)
@@ -280,4 +339,7 @@ def evaluate_CNN(model, test_loader, criterion, device, epoch, writer=None, infe
             writer.add_scalar("F1/Not_dolphin", results[2][1], epoch)
             writer.flush()
 
-    return val_losses, bacc
+    if infer:
+        return val_losses, bacc, cm
+    else:
+        return val_losses, bacc
