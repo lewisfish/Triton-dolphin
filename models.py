@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
-__main__ = ["get_densenet121", "get_vgg13_bn", "get_resnet50", "Triton", "trainKNN", "trainSVM", "get_resnet50new"]
+__main__ = ["get_densenet121", "get_vgg13_bn", "get_resnet50", "Triton", "trainKNN", "trainSVM"]
 
 
 def get_vgg13_bn(num_classes, classify=True):
@@ -58,53 +58,11 @@ def get_densenet121(num_classes, classify=True):
     return model
 
 
-def get_resnet50new(num_classes, classify=True):
+def get_resnet50(num_classes, classify=True):
 
     model = torchvision.models.resnet50(pretrained=True)
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)
-
-    return model
-
-def get_resnet50(num_classes: int, classify=True):
-    """Function returns resnet50 with most layers frozen and changed final layer.
-
-    Parameters
-    ----------
-
-    num_classes : int
-        Number of classes to classify into.
-        Or number of features to return.
-
-    Classify: bool, optional
-        Default = True. If true then return verions that can classify
-        If False return version with LogSoftmax removed.
-
-    Returns
-    -------
-
-    model : ?
-        Resnet50 model with frozen layers, and a new FC layers
-    """
-
-    # get pretrained model
-    model = torchvision.models.resnet50(pretrained=True)
-    # freeze layers
-    for param in model.parameters():
-        param.requires_grad = False
-
-    # swap out final layer so has the correct number of classes.
-    if classify:
-        model.fc = nn.Sequential(nn.Linear(2048, 512),
-                                 nn.ReLU(),
-                                 nn.Dropout(0.2),
-                                 nn.Linear(512, num_classes),
-                                 nn.LogSoftmax(dim=1))
-    else:
-        model.fc = nn.Sequential(nn.Linear(2048, 512),
-                                 nn.ReLU(),
-                                 nn.Dropout(0.2),
-                                 nn.Linear(512, num_classes))
 
     return model
 
@@ -132,9 +90,9 @@ def trainKNN(traindata: Tuple[np.ndarray, np.ndarray]) -> KNeighborsClassifier:
     Xtrain_sample, Ytrain_sample = sample.fit_sample(Xtrain, Ytrain)
 
     # Train KNN
-    # maximum on 200 neighbors with 0.7326 b.accuracy for hdbscan
+    # maximum at 13 neighbors
     # n_jobs=-1 to utilize all cores
-    knn = KNeighborsClassifier(n_neighbors=200, n_jobs=-1)
+    knn = KNeighborsClassifier(n_neighbors=13, n_jobs=-1)
     knn.fit(Xtrain_sample, Ytrain_sample.values.ravel())
 
     return knn
@@ -174,7 +132,7 @@ class Triton(nn.Module):
 
     def __init__(self, imageModel: Callable, dataModel: Callable, imageModelargs: Dict[str, Union[int, bool]], dataModelargs, num_classes: int):
         """Init Triton Model
-        
+
         Parameters
         ----------
         imageModel : Callable
@@ -188,6 +146,7 @@ class Triton(nn.Module):
         num_classes : int
             Description
         """
+
         super(Triton, self).__init__()
 
         self.imageModel = imageModel(imageModelargs["features"], classify=imageModelargs["classify"])
