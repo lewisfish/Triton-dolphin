@@ -44,6 +44,13 @@ To infer on the Triton model with DenseNet at triton-model.pth on the test set:
 To tune the hyperparmeters of the model:
   - `python classify-main.py -o` 
 
+## Data
+
+Unfortunately video and image data not currently publically available.
+The folder data contains the unsupervised labels, velocities, and labels and bounding boxes of Dolphin and Not Dolphin objects.
+Data folder also contains the class weights used in all DL models.
+Finally, data/models contains several saved wieghts for the DL models. The best CNN and Triton models and a Triton model trained without any augmentations.
+
 ## Installation
 
 Install required packages
