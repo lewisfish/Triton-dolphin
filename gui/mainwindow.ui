@@ -1,0 +1,423 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1920</width>
+    <height>1080</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>1920</width>
+    <height>1080</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Object labeler</string>
+  </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>../dolphin_icon.png</normaloff>../dolphin_icon.png</iconset>
+  </property>
+  <property name="toolTip">
+   <string>Object labeler</string>
+  </property>
+  <property name="statusTip">
+   <string>Object labeler</string>
+  </property>
+  <property name="whatsThis">
+   <string>Object labeler</string>
+  </property>
+  <property name="accessibleName">
+   <string>Object labeler</string>
+  </property>
+  <property name="accessibleDescription">
+   <string>Object labeler</string>
+  </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QGridLayout" name="gridLayout_2">
+    <item row="7" column="7">
+     <layout class="QVBoxLayout" name="verticalLayout_5">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_3">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_7">
+          <item>
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="insetImage">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>TextLabel</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QTextEdit" name="textEdit"/>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item row="0" column="0" colspan="9">
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <item>
+         <widget class="QPushButton" name="dolphinAction">
+          <property name="text">
+           <string>&amp;Dolphin</string>
+          </property>
+          <property name="shortcut">
+           <string>D</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="multiDolphinAction">
+          <property name="text">
+           <string>&amp;Multiple Dolphins</string>
+          </property>
+          <property name="shortcut">
+           <string>M</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="waterAction">
+          <property name="text">
+           <string>Water</string>
+          </property>
+          <property name="shortcut">
+           <string>V</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="trashAction">
+          <property name="text">
+           <string>&amp;Rubbish/Log</string>
+          </property>
+          <property name="shortcut">
+           <string>R</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <widget class="QPushButton" name="unknownAction">
+          <property name="text">
+           <string>&amp;Unkown</string>
+          </property>
+          <property name="shortcut">
+           <string>O</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="unknownnotcAction">
+          <property name="text">
+           <string>Unknown, not cetacean</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="birdAction">
+          <property name="text">
+           <string>Bird</string>
+          </property>
+          <property name="shortcut">
+           <string>Y</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="whaleAction">
+          <property name="text">
+           <string>&amp;Whale</string>
+          </property>
+          <property name="shortcut">
+           <string>W</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_3">
+        <item>
+         <widget class="QPushButton" name="boatAction">
+          <property name="text">
+           <string>&amp;Boat</string>
+          </property>
+          <property name="shortcut">
+           <string>B</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="turtleAction">
+          <property name="text">
+           <string>&amp;Turtle</string>
+          </property>
+          <property name="shortcut">
+           <string>T</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="fishAction">
+          <property name="text">
+           <string>Fis&amp;h</string>
+          </property>
+          <property name="shortcut">
+           <string>H</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item row="7" column="6">
+     <spacer name="horizontalSpacer_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>40</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="7" column="8">
+     <spacer name="horizontalSpacer">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>40</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="7" column="0">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_6">
+        <item>
+         <widget class="QLabel" name="imageAction">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>1600</width>
+            <height>800</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>TextLabel</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item row="2" column="0" rowspan="2">
+     <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,0">
+      <property name="rightMargin">
+       <number>10</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="backAction">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>250</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Back</string>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>arrow.png</normaloff>arrow.png</iconset>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>TextLabel</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1920</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuMenu">
+    <property name="title">
+     <string>Menu</string>
+    </property>
+    <widget class="QMenu" name="menuVideo_Speed">
+     <property name="title">
+      <string>Video Speed</string>
+     </property>
+     <addaction name="MenuSpeed0_5"/>
+     <addaction name="MenuSpeed1_0"/>
+     <addaction name="MenuSpeed2_0"/>
+    </widget>
+    <widget class="QMenu" name="menuVideo_Length">
+     <property name="title">
+      <string>Video Length</string>
+     </property>
+     <addaction name="MenuLength50"/>
+     <addaction name="MenuLength100"/>
+     <addaction name="MenuLength150"/>
+     <addaction name="MenuLength200"/>
+    </widget>
+    <addaction name="menuVideo_Speed"/>
+    <addaction name="menuVideo_Length"/>
+   </widget>
+   <addaction name="menuMenu"/>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <action name="MenuSpeed1_0">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>1.0x</string>
+   </property>
+  </action>
+  <action name="MenuSpeed2_0">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>2.0x</string>
+   </property>
+  </action>
+  <action name="MenuSpeed0_5">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>0.5x</string>
+   </property>
+  </action>
+  <action name="MenuLength100">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>4 secs</string>
+   </property>
+  </action>
+  <action name="MenuLength50">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>2 secs</string>
+   </property>
+  </action>
+  <action name="MenuLength200">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>8 secs</string>
+   </property>
+  </action>
+  <action name="MenuLength150">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>6 secs</string>
+   </property>
+  </action>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <resources/>
+ <connections/>
+</ui>
