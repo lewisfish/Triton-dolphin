@@ -2,7 +2,7 @@
 Machine learning project to classify dolphins from drone footage using image and velocity information.
 
 ## Dataset 
-Objects generated from https://github.com/lewisfish/dolphin-counter and labelled by human expert.
+Objects generated from https://github.com/lewisfish/Triton-dolphin/tree/main/label_creation and labelled by a human expert.
 
 
 ## Usage
